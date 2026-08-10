@@ -1,13 +1,14 @@
 @using FramesServer.Services
-@using Microsoft.AspNetCore.WebUtilities
 @using OfficeOpenXml
 @inject IWebHostEnvironment WebHostEnv
 
 <table class="table table-striped">
     <thead class="table-dark">
-        <th>Name</th>
-        <th>Rate</th>
-        <th>Total</th>
+        <tr>
+            <th>Name</th>
+            <th>Rate</th>
+            <th>Total</th>
+        </tr>
     </thead>
     <tbody>
         @foreach (var item in Items)
@@ -44,8 +45,10 @@
                 </h5>
                 <table class="table table-striped">
                     <thead class="table-dark">
-                        <th>Date</th>
-                        <th>Amount</th>
+                        <tr>
+                            <th>Date</th>
+                            <th>Amount</th>
+                        </tr>
                     </thead>
                     <tbody>
                         @foreach (var payment in _data.Paid)
