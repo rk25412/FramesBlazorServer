@@ -1,0 +1,195 @@
+﻿@using OfficeOpenXml
+@inject HttpClient HttpClient
+@inject IJSRuntime JsRuntime
+
+<table class="table table-striped">
+    <thead class="table-dark">
+        <tr>
+            <th>Name</th>
+            <th>Rate</th>
+            <th>Total</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in Items)
+        {
+            <tr>
+                <td>@item.Name</td>
+                <td>@item.Rate</td>
+                <td>@item.TotalLines (@item.TotalAmt.ToString("C2"))</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<EditForm Model="@_data"
+          OnValidSubmit="@OnSubmit">
+    <DataAnnotationsValidator />
+    <div class="mt-2">
+        <div class="form-group">
+            <InputNumber class="form-control mb-2"
+                         @bind-Value="@_data.LastMonthAmt"
+                         placeholder="Enter Last month Amount" />
+        </div>
+        <div class="form-group">
+            @if (_isPaymentFileSelected)
+            {
+                <h5 class="mt-2 mb-1">
+                    <span>Payments</span>
+                    <a class="ms-1"
+                       href="#"
+                       @onclick:preventDefault
+                       @onclick="@ResetInputFile">
+                        (Reset)
+                    </a>
+                </h5>
+                <table class="table table-striped">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Date</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var payment in _data.Paid)
+                        {
+                            <tr>
+                                <td>@payment.Key.ToString("dd/MM/yyyy")</td>
+                                <td>@payment.Value.ToString("C2")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <InputFile class="form-control mb-2"
+                           @key="@_inputFileKey"
+                           OnChange="@OnFileUpload"
+                           multiple="false"
+                           accept=".txt,text/plain" />
+            }
+        </div>
+    </div>
+    <div class="d-flex justify-content-end">
+        <button class="btn btn-primary"
+                type="submit">
+            Start Billing Process
+        </button>
+    </div>
+</EditForm>
+
+@code {
+
+    [Parameter, EditorRequired] public required List<GridItem> Items { get; set; }
+    [Parameter, EditorRequired] public int Month { get; set; }
+    [Parameter, EditorRequired] public int Year { get; set; }
+
+    private string? _inputFileKey = Guid.NewGuid().ToString();
+    private readonly Step2Data _data = new();
+    private bool _isPaymentFileSelected;
+
+    private async Task OnFileUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        var fileContents = await Helper.ReadFileAsString(file);
+
+        if (string.IsNullOrEmpty(fileContents) || string.IsNullOrWhiteSpace(fileContents))
+        {
+            await DialogService.Alert("Error", "Select text file");
+            ResetInputFile();
+            StateHasChanged();
+            return;
+        }
+
+        _data.Paid = fileContents.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+            .Select(y => y.Split(" - ", StringSplitOptions.RemoveEmptyEntries))
+            .ToDictionary(x => DateOnly.ParseExact(x[0], "dd/MM/yyyy"), x => decimal.Parse(x[1]));
+
+        _isPaymentFileSelected = true;
+    }
+
+    private void ResetInputFile()
+    {
+        _inputFileKey = Guid.NewGuid().ToString();
+        _data.Paid = [];
+        _isPaymentFileSelected = false;
+        StateHasChanged();
+    }
+
+    private async Task OnSubmit()
+    {
+        if (_data.Paid.Count <= 0)
+        {
+            await DialogService.Alert("Upload payment file", "Error");
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                int noOfDays = Helper.GetNoOfDays(Year, Month);
+                var template = Helper.GetExcelTemplateName(noOfDays);
+
+                var excelBytes = await HttpClient.GetByteArrayAsync($"templates/{template}");
+                using var input = new MemoryStream(excelBytes);
+                using var package = new ExcelPackage(input);
+
+                var ws = package.Workbook.Worksheets[0];
+
+                BillGeneratorService billGeneratorService = new(ws, Year, Month, Items, _data.Paid, _data.LastMonthAmt ?? 0);
+                billGeneratorService.GenerateBill();
+
+                var fileName = $"Bill_{Year}_{Month}.xlsx";
+                using var output = new MemoryStream();
+
+                package.SaveAs(output);
+
+                await JsRuntime.InvokeVoidAsync(
+                    "downloadFile",
+                    "Bill.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    output.ToArray());
+            }
+            catch (FileNotFoundException ex)
+            {
+                Console.WriteLine(ex.Message);
+                NotificationService.Notify(NotificationSeverity.Error, "Error", "Excel template not found");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+                NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+            }
+            finally
+            {
+                await Task.Delay(1000);
+                DialogService.Close();
+            }
+        });
+
+        await ShowBusyDialog();
+    }
+
+    private async Task ShowBusyDialog()
+    {
+        await DialogService.OpenAsync("", _ =>
+        {
+            return dialogContent =>
+            {
+                dialogContent.OpenComponent<RadzenRow>(0);
+                dialogContent.AddComponentParameter(1, nameof(RadzenRow.ChildContent), (RenderFragment)(rowContent =>
+                {
+                    rowContent.OpenComponent<RadzenColumn>(0);
+                    rowContent.AddComponentParameter(1, nameof(RadzenColumn.Size), 12);
+                    rowContent.AddComponentParameter(2, nameof(RadzenRow.ChildContent), (RenderFragment)(columnContent => { columnContent.AddContent(0, "Generating Bill"); }));
+                    rowContent.CloseComponent();
+                }));
+
+                dialogContent.CloseComponent();
+            };
+        }, new DialogOptions() { ShowTitle = false, Style = "min-height:auto;min-width:auto;width:auto", CloseDialogOnEsc = false });
+    }
+
+}

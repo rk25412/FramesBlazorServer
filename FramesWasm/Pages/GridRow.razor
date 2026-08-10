@@ -1,0 +1,95 @@
+<tr>
+    <td>
+        <InputText @bind-Value="@GridItem.Name"
+                   class="form-control" />
+    </td>
+    <td>
+        <InputNumber class="form-control"
+                     @bind-Value="GridItem.Rate" />
+    </td>
+    <td>
+        @if (_isFileSelected)
+        {
+            <span>
+                <button class="btn btn-danger"
+                        @onclick="@ResetInputFile">
+                    Del
+                </button>
+                <span class="mx-2">Total: @GridItem.TotalLines</span>
+                <span>(@GridItem.TotalAmt.ToString("C2"))</span>
+            </span>
+        }
+        else
+        {
+            <InputFile OnChange="@OnFileUpload"
+                       @key="@_inputFileKey"
+                       class="form-control"
+                       multiple="false"
+                       accept=".txt,text/plain" />
+        }
+    </td>
+</tr>
+
+@code {
+
+    [Parameter, EditorRequired] public GridItem GridItem { get; set; }
+
+    [CascadingParameter(Name = "SelectedMonth")]
+    public int Month { get; set; }
+
+    [CascadingParameter(Name = "SelectedYear")]
+    public int Year { get; set; }
+
+    private bool _isFileSelected;
+    private int _month;
+    private int _year;
+
+    private string? _inputFileKey = Guid.NewGuid().ToString();
+
+    protected override void OnParametersSet()
+    {
+        if (_month != Month || _year != Year)
+        {
+            ResetInputFile();
+        }
+
+        _month = Month;
+        _year = Year;
+    }
+
+    private async Task OnFileUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+
+        var fileContents = await Helper.ReadFileAsString(file);
+
+        if (string.IsNullOrEmpty(fileContents) || string.IsNullOrWhiteSpace(fileContents))
+        {
+            await DialogService.Alert("Error", "Select text file");
+            ResetInputFile();
+            StateHasChanged();
+            return;
+        }
+
+        var lines = fileContents.Split(["\r\n", "\n", "\r"], StringSplitOptions.None);
+
+        if (lines.Length != Helper.GetNoOfDays(_year, _month))
+        {
+            await DialogService.Alert("Error", "File Error");
+            ResetInputFile();
+            StateHasChanged();
+            return;
+        }
+
+        GridItem.Lines.AddRange(lines.Select(x => int.TryParse(x.Trim(), out var i) ? i : 0));
+        _isFileSelected = true;
+        StateHasChanged();
+    }
+
+    private void ResetInputFile()
+    {
+        _inputFileKey = Guid.NewGuid().ToString();
+        GridItem.Lines.Clear();
+        _isFileSelected = false;
+    }
+}

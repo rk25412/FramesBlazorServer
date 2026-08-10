@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="FramesServer/FramesServer.csproj" />
+  <Project Path="FramesWasm/FramesWasm.csproj" Id="ea2355b9-57db-4126-83a4-9e47cb93698c" />
 </Solution>
