@@ -1,0 +1,106 @@
+﻿@page "/"
+@using FramesServer.Models
+
+<PageTitle>Bill Generator</PageTitle>
+
+<div class="row">
+    <div class="col-md-4 col-sm-6 col-12 mt-2">
+        <InputSelect class="form-select"
+                     @bind-Value="_selectedMonth">
+            @foreach (var month in _monthsDdl)
+            {
+                <option value="@month.Value">
+                    @month.Text
+                </option>
+            }
+        </InputSelect>
+    </div>
+    <div class="col-md-4 col-sm-6 col-12 mt-2">
+        <InputSelect class="form-select"
+                     @bind-Value="_selectedYear">
+            @foreach (var yr in _yearsDdl)
+            {
+                <option value="@yr.Value">
+                    @yr.Text
+                </option>
+            }
+        </InputSelect>
+    </div>
+    <div class="col-md-4 col-sm-6 col-12 mt-2">
+        <div class="d-flex justify-content-end">
+            <button class="btn btn-primary"
+                    @onclick="@AddItemToGrid">
+                Add Item
+            </button>
+        </div>
+    </div>
+</div>
+<CascadingValue Value="_selectedMonth"
+                Name="SelectedMonth">
+    <CascadingValue Value="_selectedYear"
+                    Name="SelectedYear">
+        <table class="table table-striped mt-2">
+            <thead class="table-dark">
+            <th>Name</th>
+            <th>Rate</th>
+            <th>File</th>
+            </thead>
+            <tbody>
+            @foreach (var item in _gridItems)
+            {
+                <GridRow GridItem="@item"
+                         @key="@item.GridKey"/>
+            }
+            </tbody>
+        </table>
+    </CascadingValue>
+</CascadingValue>
+
+<div class="mt-2 d-flex justify-content-center">
+    <button class="btn btn-primary"
+            type="button"
+            @onclick="@GenerateBillStep2">
+        Generate Bill
+    </button>
+</div>
+
+@code {
+
+    private readonly List<GridItem> _gridItems = [];
+    private int _selectedMonth;
+    private int _selectedYear;
+    private readonly List<DropdownDto> _yearsDdl = [.. Helper.GetYears()];
+    private readonly List<DropdownDto> _monthsDdl = [.. Helper.GetMonths()];
+
+    protected override void OnInitialized()
+    {
+        _selectedMonth = DateTime.Now.Month;
+        _selectedYear = DateTime.Now.Year;
+        ResetGridItems();
+    }
+
+    private void ResetGridItems()
+    {
+        _gridItems.Clear();
+        _gridItems.Add(new GridItem { Name = "Ring" });
+        _gridItems.Add(new GridItem { Name = "Ilet" });
+    }
+
+    private void AddItemToGrid() => _gridItems.Add(new GridItem());
+
+    private async Task GenerateBillStep2()
+    {
+        if (_gridItems.Any(x => string.IsNullOrEmpty(x.Name) || x.TotalAmt is <= 0))
+        {
+            await DialogService.Alert("Data Error, check all the data");
+            return;
+        }
+
+        await DialogService.OpenAsync<GenerateBillStep2>("Summary", new Dictionary<string, object?>
+        {
+            ["Items"] = _gridItems,
+            ["Month"] = _selectedMonth,
+            ["Year"] = _selectedYear
+        });
+    }
+}
