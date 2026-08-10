@@ -41,16 +41,18 @@
                     Name="SelectedYear">
         <table class="table table-striped mt-2">
             <thead class="table-dark">
-            <th>Name</th>
-            <th>Rate</th>
-            <th>File</th>
+                <tr>
+                    <th>Name</th>
+                    <th>Rate</th>
+                    <th>File</th>
+                </tr>
             </thead>
             <tbody>
-            @foreach (var item in _gridItems)
-            {
-                <GridRow GridItem="@item"
-                         @key="@item.GridKey"/>
-            }
+                @foreach (var item in _gridItems)
+                {
+                    <GridRow GridItem="@item"
+                             @key="@item.GridKey" />
+                }
             </tbody>
         </table>
     </CascadingValue>
